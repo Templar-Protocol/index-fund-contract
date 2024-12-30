@@ -1,13 +1,14 @@
 // Find all our documentation at https://docs.near.org
-use near_sdk::{log, near};
+use near_sdk::{log, near, NearToken};
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::collections::{LookupMap, UnorderedMap};
-use near_sdk::json_types::U128;
-use near_sdk::{env, near_bindgen, AccountId, Balance, Promise, require};
+use near_sdk::collections::{UnorderedMap};
+use near_sdk::{env, AccountId, Promise, require};
+use near_sdk::json_types::{U64, U128};
 
 pub type AssetId = AccountId;
 pub type Price = U128;
 
+#[derive(Debug)]
 #[near(serializers = [json, borsh])]
 pub struct AssetWeight {
     pub weight: u32,  // Basis points (e.g., 5000 = 50%)
@@ -16,51 +17,91 @@ pub struct AssetWeight {
 
 #[near(serializers = [json, borsh])]
 pub struct AssetHolding {
-    pub balance: Balance,
+    pub balance: U128,
     pub weight: u32,
-    pub last_price: Price,
-    pub last_updated: u64,
-}
-
-#[near_bindgen]
-#[near(serializers = [json, borsh])]
-pub struct IndexFund {
-    pub dao_address: Option<AccountId>,
-    pub assets: UnorderedMap<AssetId, AssetHolding>,
-    pub last_rebalance: u64,
-    pub rebalance_interval: u64,
-    pub lp_token: AccountId,
-    pub oracle: AccountId,
+    pub last_price: U128,
+    pub last_updated: U64,
 }
 
 // Define the contract structure
 #[near(contract_state)]
-pub struct Contract {
-    greeting: String,
+pub struct IndexFund {
+    pub dao_address: Option<AccountId>,
+    pub assets: UnorderedMap<AssetId, AssetHolding>,
+    pub last_rebalance: U64,
+    pub rebalance_interval: U64, // blocks
 }
 
-// Define the default, which automatically initializes the contract
-impl Default for Contract {
+impl Default for IndexFund {
     fn default() -> Self {
         Self {
-            greeting: "Hello".to_string(),
+            dao_address: None,
+            assets: UnorderedMap::new(b"a"),
+            last_rebalance: U64(0),
+            rebalance_interval: U64(86400), // ~1 day assuming 1 block per second
         }
     }
 }
 
 // Implement the contract structure
 #[near]
-impl Contract {
-    // Public method - returns the greeting saved, defaulting to DEFAULT_GREETING
-    pub fn get_greeting(&self) -> String {
-        self.greeting.clone()
+impl IndexFund {
+    #[init]
+    pub fn new(rebalance_interval: u64) -> Self {
+        require!(rebalance_interval > 0, "Invalid rebalance interval");
+        Self {
+            dao_address: None,
+            assets: UnorderedMap::new(b"a"),
+            last_rebalance: U64(0),
+            rebalance_interval: U64(rebalance_interval),
+        }
     }
 
-    // Public method - accepts a greeting, such as "howdy", and records it
-    pub fn set_greeting(&mut self, greeting: String) {
-        log!("Saving greeting: {greeting}");
-        self.greeting = greeting;
+    #[payable]
+    pub fn register_dao(&mut self, dao_address: AccountId) {
+        require!(self.dao_address.is_none(), "DAO already registered");
+        require!(
+            env::attached_deposit() >= NearToken::from_yoctonear(env::storage_byte_cost().as_yoctonear() * 100),
+            "Insufficient storage deposit"
+        );
+        self.dao_address = Some(dao_address);
     }
+
+    pub fn update_weights(&mut self, updates: Vec<AssetWeight>) {
+        let dao = self.dao_address.as_ref().expect("DAO not registered");
+        require!(env::predecessor_account_id() == *dao, "Unauthorized");
+        
+        let total_weight: u32 = updates.iter().map(|u| u.weight).sum();
+        require!(total_weight == 10000, "Weights must sum to 100%");
+
+        for update in updates.iter() {
+            if let Some(mut holding) = self.assets.get(&update.asset_address) {
+                holding.weight = update.weight;
+                self.assets.insert(&update.asset_address, &holding);
+            } else {
+                self.assets.insert(&update.asset_address, &AssetHolding {
+                    balance: U128(0),
+                    weight: update.weight,
+                    last_price: U128(0),
+                    last_updated: U64(env::block_timestamp()),
+                });
+            }
+        }
+
+        env::log_str(&format!("Updated weights: {:?}", updates));
+    }
+
+    pub fn get_weights(&self) -> Vec<AssetWeight> {
+        self.assets.iter().map(|(asset_address, h)| AssetWeight {
+            weight: h.weight,
+            asset_address,
+        }).collect()
+    }
+
+    pub fn get_assets(&self) -> Vec<AssetId> {
+        self.assets.keys().collect()
+    }
+
 }
 
 /*
