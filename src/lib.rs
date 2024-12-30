@@ -1,5 +1,37 @@
 // Find all our documentation at https://docs.near.org
 use near_sdk::{log, near};
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::collections::{LookupMap, UnorderedMap};
+use near_sdk::json_types::U128;
+use near_sdk::{env, near_bindgen, AccountId, Balance, Promise, require};
+
+pub type AssetId = AccountId;
+pub type Price = U128;
+
+#[near(serializers = [json, borsh])]
+pub struct AssetWeight {
+    pub weight: u32,  // Basis points (e.g., 5000 = 50%)
+    pub asset_address: AssetId,
+}
+
+#[near(serializers = [json, borsh])]
+pub struct AssetHolding {
+    pub balance: Balance,
+    pub weight: u32,
+    pub last_price: Price,
+    pub last_updated: u64,
+}
+
+#[near_bindgen]
+#[near(serializers = [json, borsh])]
+pub struct IndexFund {
+    pub dao_address: Option<AccountId>,
+    pub assets: UnorderedMap<AssetId, AssetHolding>,
+    pub last_rebalance: u64,
+    pub rebalance_interval: u64,
+    pub lp_token: AccountId,
+    pub oracle: AccountId,
+}
 
 // Define the contract structure
 #[near(contract_state)]
