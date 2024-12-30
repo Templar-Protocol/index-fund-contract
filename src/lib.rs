@@ -1,9 +1,10 @@
 // Find all our documentation at https://docs.near.org
 use near_sdk::{near, NearToken};
-use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{UnorderedMap};
 use near_sdk::{env, AccountId, require};
 use near_sdk::json_types::{U64, U128};
+
+use std::str::FromStr;
 
 pub type AssetId = AccountId;
 pub type Price = U128;
@@ -132,9 +133,9 @@ mod tests {
 
     #[test]
     fn test_update_weights() {
-        let dao = AccountId::new_unvalidated("dao.near".to_string());
-        let asset1 = AccountId::new_unvalidated("asset1.near".to_string());
-        let asset2 = AccountId::new_unvalidated("asset2.near".to_string());
+        let dao = AccountId::from_str("dao.near").unwrap();
+        let asset1 = AccountId::from_str("asset1.near").unwrap();
+        let asset2 = AccountId::from_str("asset2.near").unwrap();
         
         let context = get_context(dao.clone());
         testing_env!(context.build());
@@ -173,7 +174,7 @@ mod tests {
     #[should_panic(expected = "DAO not registered")]
     fn test_update_weights_without_dao() {
         let mut contract = IndexFund::default();
-        let asset = AccountId::new_unvalidated("asset.near".to_string());
+        let asset = AccountId::from_str("asset.near").unwrap();
         
         contract.update_weights(vec![AssetWeight {
             weight: 10000,
@@ -184,9 +185,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "Unauthorized")]
     fn test_update_weights_unauthorized() {
-        let dao = AccountId::new_unvalidated("dao.near".to_string());
-        let unauthorized = AccountId::new_unvalidated("unauthorized.near".to_string());
-        let asset = AccountId::new_unvalidated("asset.near".to_string());
+        let dao = AccountId::from_str("dao.near").unwrap();
+        let unauthorized = AccountId::from_str("unauthorized.near").unwrap();
+        let asset = AccountId::from_str("asset.near").unwrap();
         
         let context = get_context(unauthorized);
         testing_env!(context.build());
@@ -203,8 +204,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "Weights must sum to 100%")]
     fn test_update_weights_invalid_sum() {
-        let dao = AccountId::new_unvalidated("dao.near".to_string());
-        let asset = AccountId::new_unvalidated("asset.near".to_string());
+        let dao = AccountId::from_str("dao.near").unwrap();
+        let asset = AccountId::from_str("asset.near").unwrap();
         
         let context = get_context(dao.clone());
         testing_env!(context.build());
