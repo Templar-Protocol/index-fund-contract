@@ -1,8 +1,8 @@
 // Find all our documentation at https://docs.near.org
-use near_sdk::{log, near, NearToken};
+use near_sdk::{near, NearToken};
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{UnorderedMap};
-use near_sdk::{env, AccountId, Promise, require};
+use near_sdk::{env, AccountId, require};
 use near_sdk::json_types::{U64, U128};
 
 pub type AssetId = AccountId;
@@ -111,18 +111,110 @@ impl IndexFund {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use near_sdk::test_utils::VMContextBuilder;
+    use near_sdk::testing_env;
 
-    #[test]
-    fn get_default_greeting() {
-        let contract = Contract::default();
-        // this test did not call set_greeting so should return the default "Hello" greeting
-        assert_eq!(contract.get_greeting(), "Hello");
+    fn get_context(predecessor: AccountId) -> VMContextBuilder {
+        let mut builder = VMContextBuilder::new();
+        builder.predecessor_account_id(predecessor);
+        builder.block_timestamp(100);
+        builder
     }
 
     #[test]
-    fn set_then_get_greeting() {
-        let mut contract = Contract::default();
-        contract.set_greeting("howdy".to_string());
-        assert_eq!(contract.get_greeting(), "howdy");
+    fn test_default_index_fund() {
+        let contract = IndexFund::default();
+        assert!(contract.dao_address.is_none());
+        assert_eq!(contract.last_rebalance, U64(0));
+        assert_eq!(contract.rebalance_interval, U64(86400));
+        assert_eq!(contract.get_assets().len(), 0);
+    }
+
+    #[test]
+    fn test_update_weights() {
+        let dao = AccountId::new_unvalidated("dao.near".to_string());
+        let asset1 = AccountId::new_unvalidated("asset1.near".to_string());
+        let asset2 = AccountId::new_unvalidated("asset2.near".to_string());
+        
+        let context = get_context(dao.clone());
+        testing_env!(context.build());
+
+        let mut contract = IndexFund::default();
+        contract.dao_address = Some(dao);
+
+        let updates = vec![
+            AssetWeight {
+                weight: 6000,
+                asset_address: asset1.clone(),
+            },
+            AssetWeight {
+                weight: 4000,
+                asset_address: asset2.clone(),
+            },
+        ];
+
+        contract.update_weights(updates);
+
+        let weights = contract.get_weights();
+        assert_eq!(weights.len(), 2);
+        
+        let asset1_weight = weights.iter()
+            .find(|w| w.asset_address == asset1)
+            .expect("Asset1 not found");
+        assert_eq!(asset1_weight.weight, 6000);
+
+        let asset2_weight = weights.iter()
+            .find(|w| w.asset_address == asset2)
+            .expect("Asset2 not found");
+        assert_eq!(asset2_weight.weight, 4000);
+    }
+
+    #[test]
+    #[should_panic(expected = "DAO not registered")]
+    fn test_update_weights_without_dao() {
+        let mut contract = IndexFund::default();
+        let asset = AccountId::new_unvalidated("asset.near".to_string());
+        
+        contract.update_weights(vec![AssetWeight {
+            weight: 10000,
+            asset_address: asset,
+        }]);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unauthorized")]
+    fn test_update_weights_unauthorized() {
+        let dao = AccountId::new_unvalidated("dao.near".to_string());
+        let unauthorized = AccountId::new_unvalidated("unauthorized.near".to_string());
+        let asset = AccountId::new_unvalidated("asset.near".to_string());
+        
+        let context = get_context(unauthorized);
+        testing_env!(context.build());
+
+        let mut contract = IndexFund::default();
+        contract.dao_address = Some(dao);
+
+        contract.update_weights(vec![AssetWeight {
+            weight: 10000,
+            asset_address: asset,
+        }]);
+    }
+
+    #[test]
+    #[should_panic(expected = "Weights must sum to 100%")]
+    fn test_update_weights_invalid_sum() {
+        let dao = AccountId::new_unvalidated("dao.near".to_string());
+        let asset = AccountId::new_unvalidated("asset.near".to_string());
+        
+        let context = get_context(dao.clone());
+        testing_env!(context.build());
+
+        let mut contract = IndexFund::default();
+        contract.dao_address = Some(dao);
+
+        contract.update_weights(vec![AssetWeight {
+            weight: 5000,  // Only 50% instead of required 100%
+            asset_address: asset,
+        }]);
     }
 }
