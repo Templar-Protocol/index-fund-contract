@@ -21,25 +21,27 @@ pub struct AssetHolding {
     pub balance: U128,
     pub weight: U64,
     pub last_price: U128,
-    pub last_updated: U128,
+    pub last_updated: U64,
 }
 
 // Define the contract structure
 #[near(contract_state)]
 pub struct IndexFund {
-    pub dao_address: Option<AccountId>,
+    // a Curator is normally a DAO, but could be any account
+    pub curator_address: Option<AccountId>,
     pub assets: UnorderedMap<AssetId, AssetHolding>,
-    pub last_rebalance: U128,
-    pub rebalance_interval: U128, // blocks
+    pub last_rebalance: U64,
+    // TODO: (LP) add support for milliseconds in addition to blocks  
+    pub rebalance_interval: U64, // blocks
 }
 
 impl Default for IndexFund {
     fn default() -> Self {
         Self {
-            dao_address: None,
+            curator_address: None,
             assets: UnorderedMap::new(b"a"),
-            last_rebalance: U128(0),
-            rebalance_interval: U128(86400), // ~1 day assuming 1 block per second
+            last_rebalance: U64(0),
+            rebalance_interval: U64(86400), // ~1 day assuming 1 block per second
         }
     }
 }
@@ -48,35 +50,49 @@ impl Default for IndexFund {
 #[near]
 impl IndexFund {
     #[init]
-    pub fn new(rebalance_interval: U128) -> Self {
-        require!(rebalance_interval > 0, "Invalid rebalance interval");
+    pub fn new(rebalance_interval: U64) -> Self {
+        require!(rebalance_interval > U64(0), "Invalid rebalance interval");
         Self {
-            dao_address: None,
+            curator_address: None,
             assets: UnorderedMap::new(b"a"),
-            last_rebalance: U128(0),
-            rebalance_interval: U128(rebalance_interval),
+            last_rebalance: U64(0),
+            rebalance_interval,
         }
     }
 
     #[payable]
-    pub fn register_dao(&mut self, dao_address: AccountId) {
-        require!(self.dao_address.is_none(), "DAO already registered");
+    pub fn register_curator(&mut self, curator_address: AccountId) {
+        require!(self.curator_address.is_none(), "curator already registered");
         require!(
             env::attached_deposit()
                 >= NearToken::from_yoctonear(env::storage_byte_cost().as_yoctonear() * 100),
             "Insufficient storage deposit"
         );
-        self.dao_address = Some(dao_address);
+        self.curator_address = Some(curator_address);
     }
 
     pub fn update_weights(&mut self, updates: Vec<AssetWeight>) {
-        let dao = self.dao_address.as_ref().expect("DAO not registered");
-        require!(env::predecessor_account_id() == *dao, "Unauthorized");
+        let curator = self.curator_address.as_ref().expect("curator not registered");
+        require!(env::predecessor_account_id() == *curator, "Unauthorized");
 
-        let total_weight: u64 = updates.iter().map(|u| u64::from(u.weight)).sum();
-        require!(U64(total_weight) == U64(10000), "Weights must sum to 100%");
+        // Create a temporary copy of current weights
+        let mut new_weights: std::collections::HashMap<AccountId, U64> = self
+            .assets
+            .iter()
+            .map(|(k, v)| (k, v.weight))
+            .collect();
 
+        // Apply updates
         for update in updates.iter() {
+            new_weights.insert(update.asset_address.clone(), update.weight);
+        }
+
+        // Verify total weight is 10000 (100%)
+        let total_weight: u64 = new_weights.values().map(|&w| u64::from(w)).sum();
+        require!(total_weight == 10000, "Final weights must sum to 100%");
+
+        // Apply updates only after verification
+        for update in &updates {
             if let Some(mut holding) = self.assets.get(&update.asset_address) {
                 holding.weight = update.weight;
                 self.assets.insert(&update.asset_address, &holding);
@@ -87,7 +103,7 @@ impl IndexFund {
                         balance: U128(0),
                         weight: update.weight,
                         last_price: U128(0),
-                        last_updated: U128(env::block_timestamp()),
+                        last_updated: U64(env::block_timestamp()),
                     },
                 );
             }
@@ -131,23 +147,23 @@ mod tests {
     #[test]
     fn test_default_index_fund() {
         let contract = IndexFund::default();
-        assert!(contract.dao_address.is_none());
-        assert_eq!(contract.last_rebalance, U128(0));
-        assert_eq!(contract.rebalance_interval, U128(86400));
+        assert!(contract.curator_address.is_none());
+        assert_eq!(contract.last_rebalance, U64(0));
+        assert_eq!(contract.rebalance_interval, U64(86400));
         assert_eq!(contract.get_assets().len(), 0);
     }
 
     #[test]
     fn test_update_weights() {
-        let dao = AccountId::from_str("dao.near").unwrap();
+        let curator = AccountId::from_str("curator.near").unwrap();
         let asset1 = AccountId::from_str("asset1.near").unwrap();
         let asset2 = AccountId::from_str("asset2.near").unwrap();
 
-        let context = get_context(dao.clone());
+        let context = get_context(curator.clone());
         testing_env!(context.build());
 
         let mut contract = IndexFund::default();
-        contract.dao_address = Some(dao);
+        contract.curator_address = Some(curator);
 
         let updates = vec![
             AssetWeight {
@@ -179,8 +195,8 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "DAO not registered")]
-    fn test_update_weights_without_dao() {
+    #[should_panic(expected = "curator not registered")]
+    fn test_update_weights_without_curator() {
         let mut contract = IndexFund::default();
         let asset = AccountId::from_str("asset.near").unwrap();
 
@@ -193,7 +209,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Unauthorized")]
     fn test_update_weights_unauthorized() {
-        let dao = AccountId::from_str("dao.near").unwrap();
+        let curator = AccountId::from_str("curator.near").unwrap();
         let unauthorized = AccountId::from_str("unauthorized.near").unwrap();
         let asset = AccountId::from_str("asset.near").unwrap();
 
@@ -201,7 +217,7 @@ mod tests {
         testing_env!(context.build());
 
         let mut contract = IndexFund::default();
-        contract.dao_address = Some(dao);
+        contract.curator_address = Some(curator);
 
         contract.update_weights(vec![AssetWeight {
             weight: 10000,
@@ -212,14 +228,14 @@ mod tests {
     #[test]
     #[should_panic(expected = "Weights must sum to 100%")]
     fn test_update_weights_invalid_sum() {
-        let dao = AccountId::from_str("dao.near").unwrap();
+        let curator = AccountId::from_str("curator.near").unwrap();
         let asset = AccountId::from_str("asset.near").unwrap();
 
-        let context = get_context(dao.clone());
+        let context = get_context(curator.clone());
         testing_env!(context.build());
 
         let mut contract = IndexFund::default();
-        contract.dao_address = Some(dao);
+        contract.curator_address = Some(curator);
 
         contract.update_weights(vec![AssetWeight {
             weight: 5000, // Only 50% instead of required 100%
