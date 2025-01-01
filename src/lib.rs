@@ -167,11 +167,11 @@ mod tests {
 
         let updates = vec![
             AssetWeight {
-                weight: 6000,
+                weight: U64(6000),
                 asset_address: asset1.clone(),
             },
             AssetWeight {
-                weight: 4000,
+                weight: U64(4000),
                 asset_address: asset2.clone(),
             },
         ];
@@ -185,13 +185,13 @@ mod tests {
             .iter()
             .find(|w| w.asset_address == asset1)
             .expect("Asset1 not found");
-        assert_eq!(asset1_weight.weight, 6000);
+        assert_eq!(asset1_weight.weight, U64(6000));
 
         let asset2_weight = weights
             .iter()
             .find(|w| w.asset_address == asset2)
             .expect("Asset2 not found");
-        assert_eq!(asset2_weight.weight, 4000);
+        assert_eq!(asset2_weight.weight, U64(4000));
     }
 
     #[test]
@@ -201,7 +201,7 @@ mod tests {
         let asset = AccountId::from_str("asset.near").unwrap();
 
         contract.update_weights(vec![AssetWeight {
-            weight: 10000,
+            weight: U64(10000),
             asset_address: asset,
         }]);
     }
@@ -220,13 +220,13 @@ mod tests {
         contract.curator_address = Some(curator);
 
         contract.update_weights(vec![AssetWeight {
-            weight: 10000,
+            weight: U64(10000),
             asset_address: asset,
         }]);
     }
 
     #[test]
-    #[should_panic(expected = "Weights must sum to 100%")]
+    #[should_panic(expected = "Final weights must sum to 100%")]
     fn test_update_weights_invalid_sum() {
         let curator = AccountId::from_str("curator.near").unwrap();
         let asset = AccountId::from_str("asset.near").unwrap();
@@ -238,7 +238,7 @@ mod tests {
         contract.curator_address = Some(curator);
 
         contract.update_weights(vec![AssetWeight {
-            weight: 5000, // Only 50% instead of required 100%
+            weight: U64(5000), // Only 50% instead of required 100%
             asset_address: asset,
         }]);
     }
