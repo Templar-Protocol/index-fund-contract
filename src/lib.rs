@@ -1,8 +1,8 @@
 // Find all our documentation at https://docs.near.org
+use near_sdk::collections::UnorderedMap;
+use near_sdk::json_types::{U128, U64};
+use near_sdk::{env, require, AccountId};
 use near_sdk::{near, NearToken};
-use near_sdk::collections::{UnorderedMap};
-use near_sdk::{env, AccountId, require};
-use near_sdk::json_types::{U64, U128};
 
 use std::str::FromStr;
 
@@ -12,7 +12,7 @@ pub type Price = U128;
 #[derive(Debug)]
 #[near(serializers = [json, borsh])]
 pub struct AssetWeight {
-    pub weight: U64,  // Basis points (e.g., 5000 = 50%)
+    pub weight: U64, // Basis points (e.g., 5000 = 50%)
     pub asset_address: AssetId,
 }
 
@@ -62,7 +62,8 @@ impl IndexFund {
     pub fn register_dao(&mut self, dao_address: AccountId) {
         require!(self.dao_address.is_none(), "DAO already registered");
         require!(
-            env::attached_deposit() >= NearToken::from_yoctonear(env::storage_byte_cost().as_yoctonear() * 100),
+            env::attached_deposit()
+                >= NearToken::from_yoctonear(env::storage_byte_cost().as_yoctonear() * 100),
             "Insufficient storage deposit"
         );
         self.dao_address = Some(dao_address);
@@ -71,7 +72,7 @@ impl IndexFund {
     pub fn update_weights(&mut self, updates: Vec<AssetWeight>) {
         let dao = self.dao_address.as_ref().expect("DAO not registered");
         require!(env::predecessor_account_id() == *dao, "Unauthorized");
-        
+
         let total_weight: u64 = updates.iter().map(|u| u64::from(u.weight)).sum();
         require!(U64(total_weight) == U64(10000), "Weights must sum to 100%");
 
@@ -80,12 +81,15 @@ impl IndexFund {
                 holding.weight = update.weight;
                 self.assets.insert(&update.asset_address, &holding);
             } else {
-                self.assets.insert(&update.asset_address, &AssetHolding {
-                    balance: U128(0),
-                    weight: update.weight,
-                    last_price: U128(0),
-                    last_updated: U128(env::block_timestamp()),
-                });
+                self.assets.insert(
+                    &update.asset_address,
+                    &AssetHolding {
+                        balance: U128(0),
+                        weight: update.weight,
+                        last_price: U128(0),
+                        last_updated: U128(env::block_timestamp()),
+                    },
+                );
             }
         }
 
@@ -93,16 +97,18 @@ impl IndexFund {
     }
 
     pub fn get_weights(&self) -> Vec<AssetWeight> {
-        self.assets.iter().map(|(asset_address, h)| AssetWeight {
-            weight: h.weight,
-            asset_address,
-        }).collect()
+        self.assets
+            .iter()
+            .map(|(asset_address, h)| AssetWeight {
+                weight: h.weight,
+                asset_address,
+            })
+            .collect()
     }
 
     pub fn get_assets(&self) -> Vec<AssetId> {
         self.assets.keys().collect()
     }
-
 }
 
 /*
@@ -136,7 +142,7 @@ mod tests {
         let dao = AccountId::from_str("dao.near").unwrap();
         let asset1 = AccountId::from_str("asset1.near").unwrap();
         let asset2 = AccountId::from_str("asset2.near").unwrap();
-        
+
         let context = get_context(dao.clone());
         testing_env!(context.build());
 
@@ -158,13 +164,15 @@ mod tests {
 
         let weights = contract.get_weights();
         assert_eq!(weights.len(), 2);
-        
-        let asset1_weight = weights.iter()
+
+        let asset1_weight = weights
+            .iter()
             .find(|w| w.asset_address == asset1)
             .expect("Asset1 not found");
         assert_eq!(asset1_weight.weight, 6000);
 
-        let asset2_weight = weights.iter()
+        let asset2_weight = weights
+            .iter()
             .find(|w| w.asset_address == asset2)
             .expect("Asset2 not found");
         assert_eq!(asset2_weight.weight, 4000);
@@ -175,7 +183,7 @@ mod tests {
     fn test_update_weights_without_dao() {
         let mut contract = IndexFund::default();
         let asset = AccountId::from_str("asset.near").unwrap();
-        
+
         contract.update_weights(vec![AssetWeight {
             weight: 10000,
             asset_address: asset,
@@ -188,7 +196,7 @@ mod tests {
         let dao = AccountId::from_str("dao.near").unwrap();
         let unauthorized = AccountId::from_str("unauthorized.near").unwrap();
         let asset = AccountId::from_str("asset.near").unwrap();
-        
+
         let context = get_context(unauthorized);
         testing_env!(context.build());
 
@@ -206,7 +214,7 @@ mod tests {
     fn test_update_weights_invalid_sum() {
         let dao = AccountId::from_str("dao.near").unwrap();
         let asset = AccountId::from_str("asset.near").unwrap();
-        
+
         let context = get_context(dao.clone());
         testing_env!(context.build());
 
@@ -214,7 +222,7 @@ mod tests {
         contract.dao_address = Some(dao);
 
         contract.update_weights(vec![AssetWeight {
-            weight: 5000,  // Only 50% instead of required 100%
+            weight: 5000, // Only 50% instead of required 100%
             asset_address: asset,
         }]);
     }
