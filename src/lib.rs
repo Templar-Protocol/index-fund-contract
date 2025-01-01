@@ -12,16 +12,16 @@ pub type Price = U128;
 #[derive(Debug)]
 #[near(serializers = [json, borsh])]
 pub struct AssetWeight {
-    pub weight: u32,  // Basis points (e.g., 5000 = 50%)
+    pub weight: U64,  // Basis points (e.g., 5000 = 50%)
     pub asset_address: AssetId,
 }
 
 #[near(serializers = [json, borsh])]
 pub struct AssetHolding {
     pub balance: U128,
-    pub weight: u32,
+    pub weight: U64,
     pub last_price: U128,
-    pub last_updated: U64,
+    pub last_updated: U128,
 }
 
 // Define the contract structure
@@ -29,8 +29,8 @@ pub struct AssetHolding {
 pub struct IndexFund {
     pub dao_address: Option<AccountId>,
     pub assets: UnorderedMap<AssetId, AssetHolding>,
-    pub last_rebalance: U64,
-    pub rebalance_interval: U64, // blocks
+    pub last_rebalance: U128,
+    pub rebalance_interval: U128, // blocks
 }
 
 impl Default for IndexFund {
@@ -38,8 +38,8 @@ impl Default for IndexFund {
         Self {
             dao_address: None,
             assets: UnorderedMap::new(b"a"),
-            last_rebalance: U64(0),
-            rebalance_interval: U64(86400), // ~1 day assuming 1 block per second
+            last_rebalance: U128(0),
+            rebalance_interval: U128(86400), // ~1 day assuming 1 block per second
         }
     }
 }
@@ -48,13 +48,13 @@ impl Default for IndexFund {
 #[near]
 impl IndexFund {
     #[init]
-    pub fn new(rebalance_interval: u64) -> Self {
+    pub fn new(rebalance_interval: U128) -> Self {
         require!(rebalance_interval > 0, "Invalid rebalance interval");
         Self {
             dao_address: None,
             assets: UnorderedMap::new(b"a"),
-            last_rebalance: U64(0),
-            rebalance_interval: U64(rebalance_interval),
+            last_rebalance: U128(0),
+            rebalance_interval: U128(rebalance_interval),
         }
     }
 
@@ -72,8 +72,8 @@ impl IndexFund {
         let dao = self.dao_address.as_ref().expect("DAO not registered");
         require!(env::predecessor_account_id() == *dao, "Unauthorized");
         
-        let total_weight: u32 = updates.iter().map(|u| u.weight).sum();
-        require!(total_weight == 10000, "Weights must sum to 100%");
+        let total_weight: u64 = updates.iter().map(|u| u64::from(u.weight)).sum();
+        require!(U64(total_weight) == U64(10000), "Weights must sum to 100%");
 
         for update in updates.iter() {
             if let Some(mut holding) = self.assets.get(&update.asset_address) {
@@ -84,7 +84,7 @@ impl IndexFund {
                     balance: U128(0),
                     weight: update.weight,
                     last_price: U128(0),
-                    last_updated: U64(env::block_timestamp()),
+                    last_updated: U128(env::block_timestamp()),
                 });
             }
         }
@@ -126,8 +126,8 @@ mod tests {
     fn test_default_index_fund() {
         let contract = IndexFund::default();
         assert!(contract.dao_address.is_none());
-        assert_eq!(contract.last_rebalance, U64(0));
-        assert_eq!(contract.rebalance_interval, U64(86400));
+        assert_eq!(contract.last_rebalance, U128(0));
+        assert_eq!(contract.rebalance_interval, U128(86400));
         assert_eq!(contract.get_assets().len(), 0);
     }
 
