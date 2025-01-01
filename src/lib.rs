@@ -31,7 +31,7 @@ pub struct IndexFund {
     pub curator_address: Option<AccountId>,
     pub assets: UnorderedMap<AssetId, AssetHolding>,
     pub last_rebalance: U64,
-    // TODO: (LP) add support for milliseconds in addition to blocks  
+    // TODO: (LP) add support for milliseconds in addition to blocks
     pub rebalance_interval: U64, // blocks
 }
 
@@ -72,15 +72,15 @@ impl IndexFund {
     }
 
     pub fn update_weights(&mut self, updates: Vec<AssetWeight>) {
-        let curator = self.curator_address.as_ref().expect("curator not registered");
+        let curator = self
+            .curator_address
+            .as_ref()
+            .expect("curator not registered");
         require!(env::predecessor_account_id() == *curator, "Unauthorized");
 
         // Create a temporary copy of current weights
-        let mut new_weights: std::collections::HashMap<AccountId, U64> = self
-            .assets
-            .iter()
-            .map(|(k, v)| (k, v.weight))
-            .collect();
+        let mut new_weights: std::collections::HashMap<AccountId, U64> =
+            self.assets.iter().map(|(k, v)| (k, v.weight)).collect();
 
         // Apply updates
         for update in updates.iter() {
