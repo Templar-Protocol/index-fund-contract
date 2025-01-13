@@ -1,4 +1,4 @@
-use near_sdk::json_types::U64;
+use near_sdk::json_types::{U128, U64};
 use serde_json::json;
 
 #[tokio::test]
@@ -9,7 +9,7 @@ async fn test_contract_is_operational() -> Result<(), Box<dyn std::error::Error>
     // Deploy contract
     let contract = sandbox.dev_deploy(&contract_wasm).await?;
 
-    // Initialize contract with 1 day rebalance interval (86400 seconds)
+    // Initialize contract with 1 day rebalance interval
     let outcome = contract
         .call("new")
         .args_json(json!({
@@ -17,7 +17,6 @@ async fn test_contract_is_operational() -> Result<(), Box<dyn std::error::Error>
         }))
         .transact()
         .await?;
-    println!("Outcome: {:?}", outcome);
     assert!(outcome.is_success());
 
     // Create curator account

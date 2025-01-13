@@ -1,7 +1,6 @@
 // Find all our documentation at https://docs.near.org
 use near_sdk::collections::UnorderedMap;
 use near_sdk::json_types::{U128, U64};
-use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, require, AccountId};
 use near_sdk::{near, NearToken};
 
@@ -11,14 +10,13 @@ pub type AssetId = AccountId;
 pub type Price = U128;
 
 #[derive(Debug)]
-#[near(serializers = [borsh, serde])]
+#[near(serializers = [json, borsh])]
 pub struct AssetWeight {
     pub weight: U64, // Basis points (e.g., 5000 = 50%)
     pub asset_address: AssetId,
 }
 
-#[derive(Debug)]
-#[near(serializers = [borsh, serde])]
+#[near(serializers = [json, borsh])]
 pub struct AssetHolding {
     pub balance: U128,
     pub weight: U64,
@@ -27,10 +25,8 @@ pub struct AssetHolding {
 }
 
 // Define the contract structure
-#[derive(Debug)]
 #[near(contract_state)]
-#[near(serializers = [borsh, serde])]
-pub struct Contract {
+pub struct IndexFund {
     // a Curator is normally a DAO, but could be any account
     pub curator_address: Option<AccountId>,
     pub assets: UnorderedMap<AssetId, AssetHolding>,
@@ -39,7 +35,7 @@ pub struct Contract {
     pub rebalance_interval: U64, // blocks
 }
 
-impl Default for Contract {
+impl Default for IndexFund {
     fn default() -> Self {
         Self {
             curator_address: None,
@@ -52,10 +48,10 @@ impl Default for Contract {
 
 // Implement the contract structure
 #[near]
-impl Contract {
+impl IndexFund {
     #[init]
     pub fn new(rebalance_interval: U64) -> Self {
-        require!(rebalance_interval.0 > 0, "Invalid rebalance interval");
+        require!(rebalance_interval > U64(0), "Invalid rebalance interval");
         Self {
             curator_address: None,
             assets: UnorderedMap::new(b"a"),
@@ -151,7 +147,7 @@ mod tests {
 
     #[test]
     fn test_default_index_fund() {
-        let contract = Contract::default();
+        let contract = IndexFund::default();
         assert!(contract.curator_address.is_none());
         assert_eq!(contract.last_rebalance, U64(0));
         assert_eq!(contract.rebalance_interval, U64(86400));
@@ -167,7 +163,7 @@ mod tests {
         let context = get_context(curator.clone());
         testing_env!(context.build());
 
-        let mut contract = Contract::default();
+        let mut contract = IndexFund::default();
         contract.curator_address = Some(curator);
 
         let updates = vec![
@@ -202,7 +198,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "curator not registered")]
     fn test_update_weights_without_curator() {
-        let mut contract = Contract::default();
+        let mut contract = IndexFund::default();
         let asset = AccountId::from_str("asset.near").unwrap();
 
         contract.update_weights(vec![AssetWeight {
@@ -221,7 +217,7 @@ mod tests {
         let context = get_context(unauthorized);
         testing_env!(context.build());
 
-        let mut contract = Contract::default();
+        let mut contract = IndexFund::default();
         contract.curator_address = Some(curator);
 
         contract.update_weights(vec![AssetWeight {
@@ -239,7 +235,7 @@ mod tests {
         let context = get_context(curator.clone());
         testing_env!(context.build());
 
-        let mut contract = Contract::default();
+        let mut contract = IndexFund::default();
         contract.curator_address = Some(curator);
 
         contract.update_weights(vec![AssetWeight {
