@@ -1,6 +1,18 @@
 # index-fund-contract
 
-cargo-near-new-project-description
+NEAR smart contract for an index fund. 
+
+## Status
+The active development of this contract is currently paused until the Templar Team has more bandwidth. If have questions and you'd like to contribute, please join the public Templar Telegram and send us a message: https://t.me/templardiscussion
+
+- [x] basic functionality for registering an index fund curator and updating the weights
+- [x] tracking rebalancing
+- [ ] fix serialization for test_basics.rs
+- [ ] chain sigs for multichain
+- [ ] rebalance automatically via intents
+
+## Architecture
+https://github.com/Templar-Protocol/architecture/blob/main/design_diagrams/index_fund.md 
 
 ## How to Build Locally?
 
